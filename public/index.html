@@ -1,74 +1,89 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Leitor QR Code - Reposição</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.9/html5-qrcode.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reposição de SKU</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    #camera { width: 100%; max-width: 500px; margin-bottom: 20px; border: 1px solid #ccc; }
-    .status { font-size: 20px; }
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2rem;
+      background-color: #f2f2f2;
+    }
+    #reader {
+      width: 300px;
+      margin: auto;
+    }
+    #mensagem {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
     .ok { color: green; }
     .erro { color: red; }
   </style>
 </head>
 <body>
-  <h1>Leitura de Reposição</h1>
-  <div id="camera">Iniciando câmera...</div>
-  <div class="status" id="status"></div>
+  <h1>Reposição de Produtos</h1>
+  <p>Escaneie o código do produto</p>
+  <div id="reader"></div>
+  <div id="mensagem"></div>
 
   <script>
-    const statusDiv = document.getElementById('status');
-    const cameraDiv = document.getElementById('camera');
+    const html5QrCode = new Html5Qrcode("reader");
 
-    function showStatus(msg, tipo) {
-      statusDiv.innerHTML = `<div class="${tipo}">${msg}</div>`;
-    }
-
-    async function startScanner(preferencia = "environment") {
-      try {
-        const html5QrCode = new Html5Qrcode("camera");
-
-        await html5QrCode.start(
-          { facingMode: preferencia },
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        const cameraId = devices[0].id;
+        html5QrCode.start(
+          cameraId,
           { fps: 10, qrbox: 250 },
-          (qrCodeMessage) => {
+          (decodedText, decodedResult) => {
+            // Pausa leitura para evitar múltiplas leituras
             html5QrCode.pause();
+
             fetch('/bipar', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sku: qrCodeMessage.trim().toLowerCase() })
+              body: JSON.stringify({ sku: decodedText.trim().toLowerCase() })
             })
-              .then(async res => {
-                const data = await res.json();
-                if (res.ok) {
-                  showStatus(`✅ ${data.mensagem}`, 'ok');
-                } else {
-                  showStatus(`❌ ${data.mensagem}`, 'erro');
-                }
-              })
-              .catch(() => {
-                showStatus("Erro na comunicação com o servidor.", 'erro');
-              })
-              .finally(() => {
-                setTimeout(() => html5QrCode.resume(), 2000);
-              });
+            .then(res => res.json())
+            .then(data => {
+              const div = document.getElementById('mensagem');
+              if (data.status === 'ok') {
+                div.innerHTML = data.mensagem;
+                div.className = 'ok';
+              } else {
+                div.innerHTML = data.mensagem;
+                div.className = 'erro';
+              }
+              setTimeout(() => {
+                html5QrCode.resume(); // Retoma leitura após 2 segundos
+              }, 2000);
+            })
+            .catch(err => {
+              console.error(err);
+              const div = document.getElementById('mensagem');
+              div.innerHTML = 'Erro ao enviar para o servidor.';
+              div.className = 'erro';
+              setTimeout(() => {
+                html5QrCode.resume();
+              }, 2000);
+            });
           },
-          (errorMessage) => {
-            // Pode ignorar erros pequenos
+          errorMessage => {
+            // Erros durante leitura (comum e esperado)
+            // console.warn(errorMessage);
           }
         );
-      } catch (err) {
-        if (preferencia === "environment") {
-          // Se falhar com traseira, tenta frontal
-          startScanner("user");
-        } else {
-          cameraDiv.innerHTML = "❌ Não foi possível acessar a câmera. Verifique as permissões do navegador.";
-        }
+      } else {
+        alert("Nenhuma câmera encontrada.");
       }
-    }
-
-    startScanner();
+    }).catch(err => {
+      alert("Erro ao acessar câmera: " + err);
+    });
   </script>
 </body>
 </html>
