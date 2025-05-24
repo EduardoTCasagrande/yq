@@ -31,8 +31,12 @@
   <div id="reader"></div>
   <div id="mensagem"></div>
 
+  <!-- Som de bip -->
+  <audio id="beep-sound" src="https://www.soundjay.com/button/beep-07.wav" preload="auto"></audio>
+
   <script>
     const html5QrCode = new Html5Qrcode("reader");
+    const beepSound = document.getElementById("beep-sound");
 
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
@@ -41,6 +45,9 @@
           cameraId,
           { fps: 10, qrbox: 250 },
           (decodedText, decodedResult) => {
+            // Toca o som
+            beepSound.play();
+
             // Pausa leitura para evitar múltiplas leituras
             html5QrCode.pause();
 
@@ -75,7 +82,6 @@
           },
           errorMessage => {
             // Erros durante leitura (comum e esperado)
-            // console.warn(errorMessage);
           }
         );
       } else {
