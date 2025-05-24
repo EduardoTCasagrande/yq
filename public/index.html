@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Leitor QR Code - Reposição</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.9/html5-qrcode.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    #camera { width: 100%; max-width: 500px; margin-bottom: 20px; border: 1px solid #ccc; }
+    .status { font-size: 20px; }
+    .ok { color: green; }
+    .erro { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Leitura de Reposição</h1>
+  <div id="camera">Iniciando câmera...</div>
+  <div class="status" id="status"></div>
+
+  <script>
+    const statusDiv = document.getElementById('status');
+    const cameraDiv = document.getElementById('camera');
+
+    function showStatus(msg, tipo) {
+      statusDiv.innerHTML = `<div class="${tipo}">${msg}</div>`;
+    }
+
+    async function startScanner(preferencia = "environment") {
+      try {
+        const html5QrCode = new Html5Qrcode("camera");
+
+        await html5QrCode.start(
+          { facingMode: preferencia },
+          { fps: 10, qrbox: 250 },
+          (qrCodeMessage) => {
+            html5QrCode.pause();
+            fetch('/bipar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sku: qrCodeMessage.trim().toLowerCase() })
+            })
+              .then(async res => {
+                const data = await res.json();
+                if (res.ok) {
+                  showStatus(`✅ ${data.mensagem}`, 'ok');
+                } else {
+                  showStatus(`❌ ${data.mensagem}`, 'erro');
+                }
+              })
+              .catch(() => {
+                showStatus("Erro na comunicação com o servidor.", 'erro');
+              })
+              .finally(() => {
+                setTimeout(() => html5QrCode.resume(), 2000);
+              });
+          },
+          (errorMessage) => {
+            // Pode ignorar erros pequenos
+          }
+        );
+      } catch (err) {
+        if (preferencia === "environment") {
+          // Se falhar com traseira, tenta frontal
+          startScanner("user");
+        } else {
+          cameraDiv.innerHTML = "❌ Não foi possível acessar a câmera. Verifique as permissões do navegador.";
+        }
+      }
+    }
+
+    startScanner();
+  </script>
+</body>
+</html>
