@@ -26,7 +26,7 @@
   </style>
 </head>
 <body>
-  <h1>Reposição de Produtos 2.0</h1>
+  <h1>Reposição de Produtos</h1>
   <p>Escaneie o código do produto</p>
   <div id="reader"></div>
   <div id="mensagem"></div>
@@ -38,81 +38,38 @@
 <script>
   const html5QrCode = new Html5Qrcode("reader");
   const beepSound = document.getElementById("beep-sound");
-  const cameraSelect = document.getElementById("cameraSelect");
-  let currentCameraId = null;
 
-  // Função para iniciar câmera
-  function startCamera(cameraId) {
-    if (html5QrCode._isScanning) {
-      html5QrCode.stop().then(() => {
-        html5QrCode.clear();
-        iniciar(cameraId);
+  html5QrCode.start(
+    { facingMode: "environment" }, // Força câmera traseira
+    { fps: 10, qrbox: 250 },
+    (decodedText, decodedResult) => {
+      beepSound.play(); // Toca o bip
+      html5QrCode.pause(); // Pausa leitura
+
+      fetch('/bipar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku: decodedText.trim().toLowerCase() })
+      })
+      .then(res => res.json())
+      .then(data => {
+        const div = document.getElementById('mensagem');
+        div.innerHTML = data.mensagem;
+        div.className = data.status === 'ok' ? 'ok' : 'erro';
+        setTimeout(() => html5QrCode.resume(), 2000);
+      })
+      .catch(err => {
+        console.error(err);
+        const div = document.getElementById('mensagem');
+        div.innerHTML = 'Erro ao enviar para o servidor.';
+        div.className = 'erro';
+        setTimeout(() => html5QrCode.resume(), 2000);
       });
-    } else {
-      iniciar(cameraId);
+    },
+    errorMessage => {
+      // Erros comuns de leitura
     }
-  }
-
-  function iniciar(cameraId) {
-    html5QrCode.start(
-      cameraId,
-      { fps: 10, qrbox: 250 },
-      (decodedText, decodedResult) => {
-        beepSound.play();
-        html5QrCode.pause();
-
-        fetch('/bipar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sku: decodedText.trim().toLowerCase() })
-        })
-        .then(res => res.json())
-        .then(data => {
-          const div = document.getElementById('mensagem');
-          div.innerHTML = data.mensagem;
-          div.className = data.status === 'ok' ? 'ok' : 'erro';
-          setTimeout(() => html5QrCode.resume(), 2000);
-        })
-        .catch(err => {
-          console.error(err);
-          const div = document.getElementById('mensagem');
-          div.innerHTML = 'Erro ao enviar para o servidor.';
-          div.className = 'erro';
-          setTimeout(() => html5QrCode.resume(), 2000);
-        });
-      },
-      error => {
-        // console.warn("Erro leitura:", error);
-      }
-    );
-  }
-
-  // Lista câmeras disponíveis e preenche o select
-  Html5Qrcode.getCameras().then(devices => {
-    if (devices && devices.length) {
-      devices.forEach((device, index) => {
-        const option = document.createElement('option');
-        option.value = device.id;
-        option.text = device.label || `Camera ${index + 1}`;
-        cameraSelect.appendChild(option);
-      });
-
-      // Inicia a primeira câmera (traseira geralmente é a última)
-      const defaultCameraId = devices.find(d => d.label.toLowerCase().includes("back"))?.id || devices[0].id;
-      cameraSelect.value = defaultCameraId;
-      startCamera(defaultCameraId);
-
-      // Quando o usuário muda a câmera
-      cameraSelect.addEventListener('change', () => {
-        const selectedId = cameraSelect.value;
-        startCamera(selectedId);
-      });
-    } else {
-      alert("Nenhuma câmera encontrada.");
-    }
-  }).catch(err => {
-    alert("Erro ao acessar câmera: " + err);
-  });
+  );
 </script>
 
 
