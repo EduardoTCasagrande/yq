@@ -13,8 +13,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Simulando banco de dados (pode ser substituído por SQLite depois)
 let reposicaoPlanejada = {
-  "helena": 3,
-  "arthur": 1
+  "helena": 300,
+  "arthur": 10
 };
 
 let contagemAtual = {};
