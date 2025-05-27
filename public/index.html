@@ -1,78 +1,149 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Reposição de SKU</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <meta charset="UTF-8">
+  <title>Carregar Dados da Planilha</title>
   <style>
     body {
-      font-family: sans-serif;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
       text-align: center;
-      padding: 2rem;
-      background-color: #f2f2f2;
+      padding-top: 60px;
     }
-    #reader {
-      width: 300px;
-      margin: auto;
+
+    header {
+      background-color: #2c3e50;
+      color: white;
+      padding: 20px 10px;
+      position: fixed;
+      top: 0;
+      width: 100%;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
     }
-    #mensagem {
-      margin-top: 1rem;
-      font-size: 1.2rem;
-      font-weight: bold;
+
+    header img {
+      height: 100px;
     }
-    .ok { color: green; }
-    .erro { color: red; }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .botao-container {
+      margin-top: 100px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    #resultado {
+      margin: 30px auto;
+      max-width: 600px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      text-align: left;
+    }
+
+    footer {
+      background-color: #2c3e50;
+      color: white;
+      text-align: center;
+      padding: 15px;
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+    }
+    a img{
+      width: 30px;
+    }
   </style>
 </head>
 <body>
-  <h1>Reposição de Produtos</h1>
-  <p>Escaneie o código do produto</p>
-  <div id="reader"></div>
-  <div id="mensagem"></div>
 
-  <!-- Som de bip -->
+  <header>
+    <img src="logo.png" alt="Logo">
+    <h1>Consulta de Reposição - Quiosques</h1>
+  </header>
 
-  <audio id="beep-sound" src="/button-3.wav" preload="auto"></audio>
+  <div class="botao-container">
+    <button onclick="carregarDados('B3:C43')">Mogi das Cruzes</button>
+    <button onclick="carregarDados('E3:F43')">Interlagos</button>
+    <button onclick="carregarDados('H3:I43')">Itaquera</button>
+    <button onclick="carregarDados('K3:L43')">Ibirapuera</button>
+    <button onclick="carregarDados('N3:O43')">Aricanduva</button>
+    <button onclick="carregarDados('Q3:R43')">Anália Franco</button>
+  </div>
 
-<script>
-  const html5QrCode = new Html5Qrcode("reader");
-  const beepSound = document.getElementById("beep-sound");
+  <div id="resultado"></div>
+  <a href="/reposicao"><img src="seta.png" alt=""></a>
 
-  html5QrCode.start(
-    { facingMode: "environment" }, // Força câmera traseira
-    { fps: 10, qrbox: 250 },
-    (decodedText, decodedResult) => {
-      beepSound.play(); // Toca o bip
-      html5QrCode.pause(); // Pausa leitura
 
-      fetch('/bipar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sku: decodedText.trim().toLowerCase() })
-      })
-      .then(res => res.json())
-      .then(data => {
-        const div = document.getElementById('mensagem');
-        div.innerHTML = data.mensagem;
-        div.className = data.status === 'ok' ? 'ok' : 'erro';
-        setTimeout(() => html5QrCode.resume(), 2000);
-      })
-      .catch(err => {
-        console.error(err);
-        const div = document.getElementById('mensagem');
-        div.innerHTML = 'Erro ao enviar para o servidor.';
-        div.className = 'erro';
-        setTimeout(() => html5QrCode.resume(), 2000);
-      });
-    },
-    errorMessage => {
-      // Erros comuns de leitura
+  <footer>
+    &copy; 2025 - Sistema de Consulta | Desenvolvido por Eduardo Casagrande
+ 
+  </footer>
+
+  <script>
+    const sheetID = "1P9flPSIzvZNn68RuhBI3WW1333vfJhCbDPh8N_FtYJA";
+    const sheetName = "Página1";
+
+    function gerarQueryURL(intervalo) {
+      const mapaColunas = {
+        "B3:C43": "B,C",
+        "E3:F43": "E,F",
+        "H3:I43": "H,I",
+        "K3:L43": "K,L",
+        "N3:O43": "N,O",
+        "Q3:R43": "Q,R"
+      };
+      const colunas = mapaColunas[intervalo];
+      const query = encodeURIComponent(`SELECT ${colunas}`);
+      return `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tq=${query}&sheet=${sheetName}`;
     }
-  );
-</script>
 
+    function carregarDados(intervalo) {
+      const url = gerarQueryURL(intervalo);
+      fetch(url)
+        .then(res => res.text())
+        .then(data => {
+          const jsonData = JSON.parse(data.substring(47).slice(0, -2));
+          const rows = jsonData.table.rows;
 
+          const resultadoDiv = document.getElementById("resultado");
+          resultadoDiv.innerHTML = "<h3>Dados:</h3><ul>" +
+            rows.map(row => `<li>${row.c[0]?.v || ''} - ${row.c[1]?.v || ''}</li>`).join("") +
+            "</ul>";
+        })
+        .catch(error => {
+          console.error("Erro ao carregar dados:", error);
+          document.getElementById("resultado").innerHTML = "<p style='color: red;'>Erro ao carregar dados.</p>";
+        });
+    }
+  </script>
 
 </body>
 </html>
