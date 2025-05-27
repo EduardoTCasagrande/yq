@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reposição de Produtos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2rem;
+      background-color: #ffe6f0;
+      color: #333;
+    }
+    select, button {
+      padding: 0.5rem 1rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    #reader {
+      width: 300px;
+      margin: 1rem auto;
+    }
+    #mensagem {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+    .ok { color: green; }
+    .erro { color: red; }
+    #resumo ul {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 1rem;
+    }
+    #resumo li {
+      margin: 0.5rem 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Reposição de Produtos</h1>
+
+  <label for="quiosqueSelect">Selecione o quiosque:</label>
+  <select id="quiosqueSelect">
+    <option value="">-- Escolha um quiosque --</option>
+    <option value="B3:C43">Mogi das Cruzes</option>
+    <option value="E3:F43">Interlagos</option>
+    <option value="H3:I43">Itaquera</option>
+    <option value="K3:L43">Ibirapuera</option>
+    <option value="N3:O43">Aricanduva</option>
+    <option value="Q3:R43">Anália Franco</option>
+  </select>
+
+  <div id="reader"></div>
+  <div id="mensagem">Selecione um quiosque para começar.</div>
+  <div id="resumo"></div>
+
+  <audio id="beep-sound" src="/button-3.wav" preload="auto"></audio>
+
+<script>
+  const html5QrCode = new Html5Qrcode("reader");
+  const beepSound = document.getElementById("beep-sound");
+  let leituraHabilitada = false;
+  let dadosPlanejados = {};
+  let contagemAtual = {};
+
+  const sheetID = "1P9flPSIzvZNn68RuhBI3WW1333vfJhCbDPh8N_FtYJA";
+  const sheetName = "Página1";
+
+  function gerarQueryURL(intervalo) {
+    const mapaColunas = {
+      "B3:C43": "B,C",
+      "E3:F43": "E,F",
+      "H3:I43": "H,I",
+      "K3:L43": "K,L",
+      "N3:O43": "N,O",
+      "Q3:R43": "Q,R"
+    };
+    const colunas = mapaColunas[intervalo];
+    const query = encodeURIComponent(`SELECT ${colunas}`);
+    return `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tq=${query}&sheet=${sheetName}`;
+  }
+
+  async function carregarReposicao(intervalo) {
+    const url = gerarQueryURL(intervalo);
+    try {
+      const res = await fetch(url);
+      const text = await res.text();
+      const json = JSON.parse(text.substring(47).slice(0, -2));
+      const rows = json.table.rows;
+
+      const dados = {};
+      for (const row of rows) {
+        if (!row.c || row.c.length <= 1 ) continue;
+
+        const skuCell = row.c[0];
+        const qtdCell = row.c[1];
+
+        if (!skuCell || !qtdCell) continue;
+
+        const sku = (skuCell.v || "").toString().trim().toLowerCase();
+        const qtd = parseInt(qtdCell.v);
+
+        if (sku && !isNaN(qtd) && qtd > 0) {
+          dados[sku] = qtd;
+        }
+      }
+
+      dadosPlanejados = dados;
+      contagemAtual = {};
+
+      await fetch('/reposicao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dados)
+      });
+
+      leituraHabilitada = true;
+      document.getElementById("mensagem").innerText = "Reposição carregada. Escaneie um produto.";
+      document.getElementById("mensagem").className = "";
+      atualizarResumo();
+
+    } catch (err) {
+      console.error(err);
+      document.getElementById("mensagem").innerText = "Erro ao carregar reposição.";
+      document.getElementById("mensagem").className = "erro";
+    }
+  }
+
+  function atualizarResumo() {
+    const resumoDiv = document.getElementById("resumo");
+    let resumoHTML = "<h3>Status da Reposição:</h3><ul>";
+
+    const listaSkus = Object.keys(dadosPlanejados).map(sku => {
+      const planejado = dadosPlanejados[sku];
+      const atual = contagemAtual[sku] || 0;
+      return { sku, planejado, atual };
+    });
+
+    const pendentes = listaSkus.filter(item => item.atual < item.planejado);
+
+    pendentes.sort((a, b) => {
+      const faltaA = a.planejado - a.atual;
+      const faltaB = b.planejado - b.atual;
+      return faltaA - faltaB;
+    });
+
+    if (pendentes.length === 0) {
+      resumoHTML += "<li>🎉 Todos os produtos foram bipados com sucesso!</li>";
+    } else {
+      pendentes.forEach((item, index) => {
+        const destaque = index === 0
+          ? 'style="background-color: #e825be; border: 1px solid #ffeeba; border-radius: 6px; padding: 5px;"'
+          : '';
+        resumoHTML += `<li ${destaque}><strong>${item.sku}</strong>: ${item.atual}/${item.planejado}</li>`;
+      });
+    }
+
+    resumoHTML += "</ul>";
+    resumoDiv.innerHTML = resumoHTML;
+  }
+
+  document.getElementById("quiosqueSelect").addEventListener("change", (e) => {
+    const intervalo = e.target.value;
+    if (intervalo) carregarReposicao(intervalo);
+  });
+
+  html5QrCode.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    async (decodedText) => {
+      if (!leituraHabilitada) return;
+
+      beepSound.play();
+      html5QrCode.pause();
+
+      const sku = decodedText.trim().toLowerCase();
+
+      try {
+        const res = await fetch('/bipar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sku })
+        });
+
+        const data = await res.json();
+        const div = document.getElementById("mensagem");
+        div.innerText = data.mensagem;
+        div.className = data.status === 'ok' ? 'ok' : 'erro';
+
+        if (data.atual) {
+          contagemAtual = data.atual;
+        }
+
+        atualizarResumo();
+
+      } catch (err) {
+        console.error(err);
+        const div = document.getElementById("mensagem");
+        div.innerText = 'Erro ao enviar SKU.';
+        div.className = 'erro';
+      }
+
+      setTimeout(() => html5QrCode.resume(), 2000);
+    }
+  );
+</script>
+</body>
+</html>
